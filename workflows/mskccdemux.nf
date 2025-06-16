@@ -16,6 +16,32 @@ include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_mskc
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+process remove_primers {
+    tag 'remove_primers'
+    input:
+    tuple val(meta), path(readsF), path(readsR)
+
+    output:
+    path 'reads1.fastq'
+    path 'reads2.fastq'
+    path 'barcodes.fastq'
+    path 'primer_removal.log'
+    container 'ghcr.io/vdblab/biopython:1.70a'
+    cpus 1
+    memory '12 GB'
+    script:
+    def primer_f = meta.primer_f
+    def primer_r = meta.primer_r
+    """
+    strip_addons3_py3.py \\
+      -fw_primer $primer_f -rev_primer $primer_r -remove_bar_primer \\
+       ${readsF} ${readsR} \\
+    >> primer_removal.log 2>&1
+    """
+}
+
+params.poolid = "mypool"
+
 workflow MSKCCDEMUX {
 
     take:
@@ -37,13 +63,19 @@ workflow MSKCCDEMUX {
 	    meta = ["id": "${x.simpleName}"]
 	    [meta, x]
 	}
+    fqc_inputs_alt = ch_samplesheet.map{ meta, reads ->
+	meta = ["id": params.poolid, "primer_f": meta["primer_f"], "primer_r": meta["primer_r"]]
+	[meta, reads[0], reads[1]]
+    }.unique()
 
     FASTQC (
         fqc_inputs
     )
+    remove_primers (
+	fqc_inputs_alt
+    )
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]})
     ch_versions = ch_versions.mix(FASTQC.out.versions.first())
-
 
 
     //
