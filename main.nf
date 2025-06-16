@@ -42,7 +42,6 @@ workflow MSKCCMICROBIOME_MSKCCDEMUX {
 
     take:
     samplesheet // channel: samplesheet read in from --input
-
     main:
 
     //

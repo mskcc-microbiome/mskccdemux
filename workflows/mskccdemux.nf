@@ -20,18 +20,31 @@ workflow MSKCCDEMUX {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
-    main:
 
+    main:
     ch_versions = Channel.empty()
     ch_multiqc_files = Channel.empty()
+    //LOG(ch_fastqs)
     //
     // MODULE: Run FastQC
     //
+
+    // Get the unique fastqs from the sample sheet and execute pool/multiplex level fastqc
+    fqc_inputs = ch_samplesheet.map{it[1]}
+	.unique()
+	.flatten()
+	.map{ x ->
+	    meta = ["id": "${x.simpleName}"]
+	    [meta, x]
+	}
+
     FASTQC (
-        ch_samplesheet
+        fqc_inputs
     )
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]})
     ch_versions = ch_versions.mix(FASTQC.out.versions.first())
+
+
 
     //
     // Collate and save software versions

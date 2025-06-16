@@ -13,6 +13,30 @@
                 "errorMessage": "Sample name must be provided and cannot contain spaces",
                 "meta": ["id"]
             },
+            "primer_f": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Forward Primer must be provided and cannot contain spaces",
+                "meta": ["primer_f"]
+            },
+            "primer_r": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Revers Primer must be provided and cannot contain spaces",
+                "meta": ["primer_r"]
+            },
+            "barcode_f": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Forward barcode must be provided and cannot contain spaces",
+                "meta": ["barcode_f"]
+            },
+            "barcode_r": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "errorMessage": "Revers barcode must be provided and cannot contain spaces",
+                "meta": ["barcode_r"]
+            },
             "fastq_1": {
                 "type": "string",
                 "format": "file-path",
