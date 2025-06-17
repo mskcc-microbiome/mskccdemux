@@ -3,12 +3,17 @@
     IMPORT MODULES / SUBWORKFLOWS / FUNCTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-include { FASTQC                 } from '../modules/nf-core/fastqc/main'
-include { MULTIQC                } from '../modules/nf-core/multiqc/main'
-include { paramsSummaryMap       } from 'plugin/nf-schema'
-include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
-include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
-include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_mskccdemux_pipeline'
+include { FASTQC                         } from '../modules/nf-core/fastqc/main'
+include { MULTIQC                        } from '../modules/nf-core/multiqc/main'
+include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
+include { add_demultiplex_info as adi_r  } from '../modules/local/add_demultiplex_info/main'
+include { make_map                       } from '../modules/local/make_map/main'
+include { demultiplex as demux_f         } from '../modules/local/demux/main'
+include { demultiplex as demux_r         } from '../modules/local/demux/main'
+include { paramsSummaryMap               } from 'plugin/nf-schema'
+include { paramsSummaryMultiqc           } from '../subworkflows/nf-core/utils_nfcore_pipeline'
+include { softwareVersionsToYAML         } from '../subworkflows/nf-core/utils_nfcore_pipeline'
+include { methodsDescriptionText         } from '../subworkflows/local/utils_nfcore_mskccdemux_pipeline'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -22,9 +27,9 @@ process remove_primers {
     tuple val(meta), path(readsF), path(readsR)
 
     output:
-    path 'reads1.fastq'
-    path 'reads2.fastq'
-    path 'barcodes.fastq'
+    path 'reads1.fastq', emit: reads1
+    path 'reads2.fastq', emit: reads2
+    path 'barcodes.fastq', emit: barcodes
     path 'primer_removal.log'
     container 'ghcr.io/vdblab/biopython:1.70a'
     cpus 1
@@ -37,6 +42,20 @@ process remove_primers {
       -fw_primer $primer_f -rev_primer $primer_r -remove_bar_primer \\
        ${readsF} ${readsR} \\
     >> primer_removal.log 2>&1
+    """
+}
+
+process guess_encoding {
+    tag 'guess_encoding'
+    input:
+    path reads_fq
+    output:
+      path 'encoding.txt' , emit: encoding
+    container 'ghcr.io/vdblab/biopython:1.70a'
+    cpus 1
+    script:
+    """
+    guess-encoding.py ${reads_fq} encoding.txt 2>> guess_encoding.log
     """
 }
 
@@ -73,6 +92,38 @@ workflow MSKCCDEMUX {
     )
     remove_primers (
 	fqc_inputs_alt
+    )
+    guess_encoding (
+	remove_primers.out[0]
+    )
+
+    make_map (
+	file(params.input)
+    )
+
+    adi_f (
+	remove_primers.out.reads1,
+	make_map.out.map1,
+	remove_primers.out.barcodes,
+	guess_encoding.out.encoding,
+	1
+    )
+    adi_r  (
+	remove_primers.out.reads2,
+	make_map.out.map2,
+	remove_primers.out.barcodes,
+	guess_encoding.out.encoding,
+	2
+    )
+    demux_f(
+	adi_f.out.seqsfq.toList(),
+	make_map.out.samplefiles.flatten(),
+	1
+    )
+    demux_r(
+	adi_r.out.seqsfq.toList(),
+	make_map.out.samplefiles.flatten(),
+	2
     )
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]})
     ch_versions = ch_versions.mix(FASTQC.out.versions.first())
