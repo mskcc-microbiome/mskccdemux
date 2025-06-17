@@ -3,8 +3,9 @@ process make_map {
     publishDir params.outdir, mode: 'copy'
     memory { 2.GB * task.attempt }
     time { 1.hour * task.attempt }
+
     input:
-    path csv_file
+    val csv_file_path
 
     output:
     path "${csv_file.simpleName}.map.1", emit: map1
@@ -16,7 +17,7 @@ process make_map {
      *   3. Writes the QIIME header plus transformed rows to a .tsv file.
      */
     exec:
-    csv_file = file(csv_file)
+    csv_file = file(csv_file_path) // see https://github.com/nextflow-io/nextflow/discussions/5407
     outfile1 = task.workDir.resolve("${csv_file.simpleName}.map.1")
     outfile2 = task.workDir.resolve("${csv_file.simpleName}.map.2")
     outfile1.withPrintWriter { w ->

@@ -59,7 +59,6 @@ process guess_encoding {
     """
 }
 
-params.poolid = "mypool"
 
 workflow MSKCCDEMUX {
 
@@ -96,9 +95,8 @@ workflow MSKCCDEMUX {
     guess_encoding (
 	remove_primers.out[0]
     )
-
     make_map (
-	file(params.input)
+	params.input
     )
 
     adi_f (
