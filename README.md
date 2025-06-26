@@ -46,6 +46,13 @@ Each row represents a fastq file (single-end) or a pair of fastq files (paired e
 
 -->
 
+You can create a compatible csv input samplesheet from a qiime-style oligos file as follows:
+```
+DEST="input.csv" R1="path/to/R1" R2="path/to/r2" primerf=$(head -n1 tmp.oligos | cut -f 2) primerr=$(head -n1 tmp.oligos | cut -f 3); echo "sample,primer_f,primer_r,barcode_f,barcode_r,fastq_1,fastq_2" > $DEST; grep BARCODE tmp.oligos | while read x bar bar2 sample ; do echo -e "$sample,$primerf,$primerr,$bar,$bar2,$R1,$R2" ; done >> $DEST
+
+```
+
+
 Now, you can run the pipeline using:
 
 <!-- TODO nf-core: update the following command to include all required parameters for a minimal example -->
