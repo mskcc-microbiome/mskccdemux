@@ -56,8 +56,8 @@ process make_map {
 	    }
 	}
     }
-    sample = "Unassigned.sample"
-    thisout = task.workDir.resolve("sampleids/$sample")
+    sample = "Unassigned"
+    thisout = task.workDir.resolve("sampleids/${sample}.sample")
     thisout.withPrintWriter { w ->
 	w.println(sample)
     }
