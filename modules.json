@@ -18,6 +18,13 @@
                         "installed_by": [
                             "modules"
                         ]
+                    },
+                    "seqkit/stats": {
+                        "branch": "master",
+                        "git_sha": "9fe7867a4f012db581d7bd560228ded1074eb0e5",
+                        "installed_by": [
+                            "modules"
+                        ]
                     }
                 }
             },

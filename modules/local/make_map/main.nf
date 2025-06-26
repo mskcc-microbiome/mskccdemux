@@ -26,6 +26,7 @@ process make_map {
             if (index != 1) { // skip header row
 		def cols = line.split(',')
 		def (sample, primer_f, primer_r, barcode_f, barcode_r) = cols
+		sample = sample.replaceFirst(/\.\..*/, '')
 		w.println([sample, barcode_f, primer_f, primer_r, sample].join('\t'))
 	    }
         }
@@ -36,6 +37,7 @@ process make_map {
             if (index != 1) { // skip header row
 		def cols = line.split(',')
 		def (sample, primer_f, primer_r, barcode_f, barcode_r) = cols
+		sample = sample.replaceFirst(/\.\..*/, '')
 		w.println([sample, barcode_f,  primer_r, primer_f, sample].join('\t'))
 	    }
         }
@@ -47,15 +49,16 @@ process make_map {
         if (index != 1) { // skip header row
 	    def cols = line.split(',')
 	    def (sample, primer_f, primer_r, barcode_f, barcode_r) = cols
+	    sample = sample.replaceFirst(/\.\..*/, '')
 	    thisout = task.workDir.resolve("sampleids/${sample}.sample")
 	    thisout.withPrintWriter { w ->
-		w.println([sample])
+		w.println(sample)
 	    }
 	}
     }
     sample = "Unassigned.sample"
     thisout = task.workDir.resolve("sampleids/$sample")
     thisout.withPrintWriter { w ->
-	w.println([sample])
+	w.println(sample)
     }
 }

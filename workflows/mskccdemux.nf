@@ -5,6 +5,7 @@
 */
 include { FASTQC                         } from '../modules/nf-core/fastqc/main'
 include { MULTIQC                        } from '../modules/nf-core/multiqc/main'
+include { SEQKIT_STATS                   } from '../modules/nf-core/seqkit/stats/main'
 include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
 include { add_demultiplex_info as adi_r  } from '../modules/local/add_demultiplex_info/main'
 include { make_map                       } from '../modules/local/make_map/main'
@@ -59,6 +60,20 @@ process guess_encoding {
     """
 }
 
+process rename_for_multiqc{
+    """ Multiqc requires the _mqc string in the file name for auto detection
+
+    """
+    input:
+    path seqkit
+    output:
+    path "demultiplex_seqkit_stats_mqc.out" , emit: mqc
+
+    script:
+    """
+    cp $seqkit demultiplex_seqkit_stats_mqc.out
+    """
+}
 
 workflow MSKCCDEMUX {
 
@@ -123,8 +138,32 @@ workflow MSKCCDEMUX {
 	make_map.out.samplefiles.flatten(),
 	2
     )
-    ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]})
-    ch_versions = ch_versions.mix(FASTQC.out.versions.first())
+
+    seqkit_input = demux_f.out.samplefq.mix(
+	 demux_r.out.samplefq
+    )
+	.collect(sort:true)
+	.map{ x ->
+	    meta = ["id": "${params.poolid}"]
+	    [meta, x]
+	}
+    SEQKIT_STATS (
+	seqkit_input
+
+    )
+
+
+    //SEQKIT_STATS.out.stats.collectFile( name: 'demultiplex_seqkit_stats_mqc.out')
+    // SEQKIT_STATS.out.stats
+    // 	.map{x -> [x]}
+    // 	.collectFile(
+    // 	    name: 'demultiplex_seqkit_stats_mqc.out',
+    // 	    storeDir: "${params.outdir}/")
+    rename_for_multiqc(
+	SEQKIT_STATS.out.stats.collect{it[1]}
+    )
+    ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]}).mix(rename_for_multiqc.out.mqc)
+    ch_versions = ch_versions.mix(FASTQC.out.versions.first()).mix(SEQKIT_STATS.out.versions.first())
 
 
     //
