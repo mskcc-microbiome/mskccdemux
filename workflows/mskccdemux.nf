@@ -8,6 +8,8 @@ include { MULTIQC                        } from '../modules/nf-core/multiqc/main
 include { SEQKIT_STATS                   } from '../modules/nf-core/seqkit/stats/main'
 include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
 include { add_demultiplex_info as adi_r  } from '../modules/local/add_demultiplex_info/main'
+include { tag_empty as tag_empty_f       } from '../modules/local/tag_empty/main'
+include { tag_empty as tag_empty_r       } from '../modules/local/tag_empty/main'
 include { make_map                       } from '../modules/local/make_map/main'
 include { demultiplex as demux_f         } from '../modules/local/demux/main'
 include { demultiplex as demux_r         } from '../modules/local/demux/main'
@@ -151,7 +153,12 @@ workflow MSKCCDEMUX {
 	seqkit_input
 
     )
-
+    tag_empty_f(
+	demux_f.out.samplefq
+    )
+    tag_empty_r(
+	demux_r.out.samplefq
+    )
 
     //SEQKIT_STATS.out.stats.collectFile( name: 'demultiplex_seqkit_stats_mqc.out')
     // SEQKIT_STATS.out.stats

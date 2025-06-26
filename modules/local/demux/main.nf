@@ -1,5 +1,4 @@
 process demultiplex {
-    publishDir "${params.outdir}/isolated_oligos", mode: 'copy'
     tag 'demultiplex'
 
     input:
