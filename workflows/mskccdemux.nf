@@ -85,11 +85,12 @@ workflow MSKCCDEMUX {
     main:
     ch_versions = Channel.empty()
     ch_multiqc_files = Channel.empty()
+    def outdir = file(params.outdir)
     //LOG(ch_fastqs)
     //
     // MODULE: Run FastQC
     //
-
+    //ch_samplesheet.view()
     // Get the unique fastqs from the sample sheet and execute pool/multiplex level fastqc
     fqc_inputs = ch_samplesheet.map{it[1]}
 	.unique()
@@ -112,32 +113,67 @@ workflow MSKCCDEMUX {
     guess_encoding (
 	remove_primers.out[0]
     )
-    make_map (
-	params.input
-    )
+    /////////////////////////////////////
+    map1_path = outdir.resolve( params.poolid + ".map.1")
+    map2_path = outdir.resolve( params.poolid + ".map.2")
+    header = Channel.value("#SampleID\tBarcodeSequence\tLinkerPrimerSequence\tReversePrimer\tDescription")
+    header
+    .concat(
+	ch_samplesheet
+	.map{ meta, reads ->
+            "${meta.id}\t${meta.barcode_f}\t${meta.primer_f}\t${meta.primer_r}\t${meta.rawid}"
+	    }		
+    )	    
+    .collectFile(name: map1_path, newLine: true, sort:false)
+    header
+    .concat(
+	ch_samplesheet
+	.map{ meta, reads ->
+            "${meta.id}\t${meta.barcode_r}\t${meta.primer_r}\t${meta.primer_f}\t${meta.rawid}"
+	    }		
+    )	    
+    .collectFile(name: map2_path, newLine: true, sort:false)
+    
+    sampledir = file("${params.outdir}/sampleids/")
+    sampledir.mkdir()
+
+    ch_samplesheet
+    .map{ meta, reads ->
+            "${meta.id}"
+	    }
+    .concat(Channel.value("Unassigned"))
+    .collectFile{ x ->
+        [ sampledir.resolve("${x}.sample"), x ]
+	}
+    .set{ samplefiles }
+    
+    /////////////////////////////////////    
+    //make_map (
+    // 	params.input
+    //)
 
     adi_f (
 	remove_primers.out.reads1,
-	make_map.out.map1,
+	map1_path,
 	remove_primers.out.barcodes,
 	guess_encoding.out.encoding,
 	1
     )
     adi_r  (
 	remove_primers.out.reads2,
-	make_map.out.map2,
+	map2_path,
 	remove_primers.out.barcodes,
 	guess_encoding.out.encoding,
 	2
     )
     demux_f(
 	adi_f.out.seqsfq.toList(),
-	make_map.out.samplefiles.flatten(),
+	samplefiles.flatten(),
 	1
     )
     demux_r(
 	adi_r.out.seqsfq.toList(),
-	make_map.out.samplefiles.flatten(),
+	samplefiles.flatten(),
 	2
     )
 
@@ -170,7 +206,7 @@ workflow MSKCCDEMUX {
 	SEQKIT_STATS.out.stats.collect{it[1]}
     )
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]}).mix(rename_for_multiqc.out.mqc)
-    ch_versions = ch_versions.mix(FASTQC.out.versions.first()).mix(SEQKIT_STATS.out.versions.first())
+    ch_versions = ch_versions.mix(FASTQC.out.versions.first()).mix(SEQKIT_STATS.out.versions)
 
 
     //

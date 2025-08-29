@@ -73,13 +73,14 @@ workflow PIPELINE_INITIALISATION {
     //
 
     Channel
-        .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json"))
+        .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json").withIndex())
         .map {
-            meta, fastq_1, fastq_2 ->
-                if (!fastq_2) {
-                    return [ meta.id, meta + [ single_end:true ], [ fastq_1 ] ]
+            raw, idx ->
+	    newid = "mskccdemux" + idx
+	    if (!raw[2]) {
+                    return [ newid, [id:newid] + raw[0] + [ single_end:true ], [ raw[1] ] ]
                 } else {
-                    return [ meta.id, meta + [ single_end:false ], [ fastq_1, fastq_2 ] ]
+                    return [ newid, [id:newid] + raw[0] + [ single_end:false ], [ raw[1], raw[2] ] ]
                 }
         }
         .groupTuple()
