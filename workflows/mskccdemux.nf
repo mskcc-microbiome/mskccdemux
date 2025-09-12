@@ -122,18 +122,18 @@ workflow MSKCCDEMUX {
 	ch_samplesheet
 	.map{ meta, reads ->
             "${meta.id}\t${meta.barcode_f}\t${meta.primer_f}\t${meta.primer_r}\t${meta.rawid}"
-	    }		
-    )	    
+	    }
+    )
     .collectFile(name: map1_path, newLine: true, sort:false)
     header
     .concat(
 	ch_samplesheet
 	.map{ meta, reads ->
             "${meta.id}\t${meta.barcode_r}\t${meta.primer_r}\t${meta.primer_f}\t${meta.rawid}"
-	    }		
-    )	    
+	    }
+    )
     .collectFile(name: map2_path, newLine: true, sort:false)
-    
+
     sampledir = file("${params.outdir}/sampleids/")
     sampledir.mkdir()
 
@@ -146,8 +146,8 @@ workflow MSKCCDEMUX {
         [ sampledir.resolve("${x}.sample"), x ]
 	}
     .set{ samplefiles }
-    
-    /////////////////////////////////////    
+
+    /////////////////////////////////////
     //make_map (
     // 	params.input
     //)
