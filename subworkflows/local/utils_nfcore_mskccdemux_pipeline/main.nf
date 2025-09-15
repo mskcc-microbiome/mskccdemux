@@ -76,7 +76,7 @@ workflow PIPELINE_INITIALISATION {
         .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json").withIndex())
         .map {
             raw, idx ->
-	    newid = "demux" + params.poolid + idx
+	    newid = "demux" + params.poolid +  "sample" + idx
 	    if (!raw[2]) {
                     return [ newid, [id:newid] + raw[0] + [ single_end:true ], [ raw[1] ] ]
                 } else {
