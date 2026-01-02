@@ -48,7 +48,12 @@ Each row represents a fastq file (single-end) or a pair of fastq files (paired e
 
 You can create a compatible csv input samplesheet from a qiime-style oligos file as follows:
 ```
-DEST="input.csv" R1="path/to/R1" R2="path/to/r2" primerf=$(head -n1 tmp.oligos | cut -f 2) primerr=$(head -n1 tmp.oligos | cut -f 3); echo "sample,primer_f,primer_r,barcode_f,barcode_r,fastq_1,fastq_2" > $DEST; grep BARCODE tmp.oligos | while read x bar bar2 sample ; do echo -e "$sample,$primerf,$primerr,$bar,$bar2,$R1,$R2" ; done >> $DEST
+
+
+OLIGOS="tmp.oligos"
+# sometimes people make these with windows line endings
+sed -i 's/\r//g' $OLIGOS
+DEST="input.csv" R1="path/to/R1" R2="path/to/r2" primerf=$(head -n1 $OLIGOS | cut -f 2) primerr=$(head -n1 $OLIGOS | cut -f 3); echo "sample,primer_f,primer_r,barcode_f,barcode_r,fastq_1,fastq_2" > $DEST; grep BARCODE $OLIGOS | while read x bar bar2 sample ; do echo -e "$sample,$primerf,$primerr,$bar,$bar2,$R1,$R2" ; done >> $DEST
 
 ```
 
@@ -95,3 +100,13 @@ This pipeline uses code and infrastructure developed and maintained by the [nf-c
 > Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
 >
 > _Nat Biotechnol._ 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).
+
+
+## A note on multi library support
+Occassionally data will be provided from the same sequencing run as separate lane files.  DADA2 does not need different error profiles per-lane, so we allow those files to be specified in this workflow to merging prior to demultiplexing. Multilib samples should be added to the samplesheet using the `run_accession` column to differentiate the different lanes. Test data can be acquired with the  `multilib_test_data/getdata.sh`   script, and tested with the `assets/samples_multilib.csv` samplesheet.
+```
+cd multilib_test_data/
+bash getdata.sh
+cd ../
+nextflow run .  -profile singularity --outdir multilib --input assets/input_multilib.csv
+```

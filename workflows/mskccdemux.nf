@@ -4,6 +4,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 include { FASTQC                         } from '../modules/nf-core/fastqc/main'
+include { CAT_FASTQ as MERGE_RUNS        } from '../modules/nf-core/cat/fastq/main'
 include { MULTIQC                        } from '../modules/nf-core/multiqc/main'
 include { SEQKIT_STATS                   } from '../modules/nf-core/seqkit/stats/main'
 include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
@@ -89,27 +90,53 @@ workflow MSKCCDEMUX {
     //LOG(ch_fastqs)
     //
     // MODULE: Run FastQC
-    //
-    //ch_samplesheet.view()
     // Get the unique fastqs from the sample sheet and execute pool/multiplex level fastqc
-    fqc_inputs = ch_samplesheet.map{it[1]}
-	.unique()
-	.flatten()
-	.map{ x ->
-	    meta = ["id": "${x.simpleName}"]
-	    [meta, x]
-	}
-    fqc_inputs_alt = ch_samplesheet.map{ meta, reads ->
-	meta = ["id": params.poolid, "primer_f": meta["primer_f"], "primer_r": meta["primer_r"]]
-	[meta, reads[0], reads[1]]
-    }.unique()
+//    ch_samplesheet.view()
+    fqc_inputs = ch_samplesheet.flatMap{
+       meta, reads ->
+    reads.withIndex().collect { read, idx ->
+        def new_meta = ["run_accession": meta["run_accession"], "single_end":  meta["single_end"], "read_idx": idx + 1]
+        [new_meta, read]
+    }}.unique()
 
     FASTQC (
         fqc_inputs
     )
+    // we can't concatenate files if there is not a second run, so we branch
+    // here to separate them out, and mix back in after for efficiency
+    ch_reads_grouped = fqc_inputs
+        .map { meta, reads -> [[id: "pool", single_end: meta["single_end"]], reads] }
+        .groupTuple ()
+	.branch { meta, reads ->
+	    cat: (meta.single_end && reads.size() > 1) || (!meta.single_end && reads.size() > 2)
+	    skip: true
+	}
+    MERGE_RUNS ( ch_reads_grouped.cat)
+    ch_reads_runmerged = MERGE_RUNS.out.reads
+	.mix(ch_reads_grouped.skip) // dont need extra flatten cause this pipeline will always run on either a merged set of libraries or single library, not mixing at the sample level between both
+   // ch_versions = ch_versions.mix(MERGE_RUNS.out.versions)
+
+
+    ch_samplesheet_unique = ch_samplesheet
+	.unique { meta, reads ->
+            meta.rawid  // if we have multiple libraries, we need to toss  duplicated  entries in the sample sheet
+	}
+
+    def merged_reads = ch_reads_runmerged.first()
+    persample_inputs = ch_samplesheet_unique
+	.combine(ch_reads_runmerged.first())
+	.map{ meta, reads, newmeta, newreads ->
+	meta = ["id": params.poolid, "primer_f": meta["primer_f"], "primer_r": meta["primer_r"]]
+	[meta, newreads[0], newreads[1]]
+	}.unique()
+
+    persample_inputs
+
     remove_primers (
-	fqc_inputs_alt
+	persample_inputs
     )
+
+
     guess_encoding (
 	remove_primers.out[0]
     )
@@ -119,7 +146,7 @@ workflow MSKCCDEMUX {
     header = Channel.value("#SampleID\tBarcodeSequence\tLinkerPrimerSequence\tReversePrimer\tDescription")
     header
     .concat(
-	ch_samplesheet
+	ch_samplesheet_unique
 	.map{ meta, reads ->
             "${meta.id}\t${meta.barcode_f}\t${meta.primer_f}\t${meta.primer_r}\t${meta.rawid}"
 	    }
@@ -127,7 +154,7 @@ workflow MSKCCDEMUX {
     .collectFile(name: map1_path, newLine: true, sort:false)
     header
     .concat(
-	ch_samplesheet
+	ch_samplesheet_unique
 	.map{ meta, reads ->
             "${meta.id}\t${meta.barcode_r}\t${meta.primer_r}\t${meta.primer_f}\t${meta.rawid}"
 	    }
@@ -137,7 +164,7 @@ workflow MSKCCDEMUX {
     sampledir = file("${params.outdir}/sampleids/")
     sampledir.mkdir()
 
-    ch_samplesheet
+    ch_samplesheet_unique
     .map{ meta, reads ->
             "${meta.id}"
 	    }
@@ -166,6 +193,7 @@ workflow MSKCCDEMUX {
 	guess_encoding.out.encoding,
 	2
     )
+
     demux_f(
 	adi_f.out.seqsfq.toList(),
 	samplefiles.flatten(),

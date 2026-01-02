@@ -37,6 +37,12 @@
                 "errorMessage": "Revers barcode must be provided and cannot contain spaces",
                 "meta": ["barcode_r"]
             },
+            "run_accession": {
+                "type": ["string", "integer"],
+                "meta": ["run_accession"],
+                "pattern": "^[^\\s]+$",
+                "errorMessage": "Run accession must be provided and cannot contain spaces."
+            },
             "fastq_1": {
                 "type": "string",
                 "format": "file-path",
