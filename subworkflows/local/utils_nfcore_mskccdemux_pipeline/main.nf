@@ -76,7 +76,7 @@ workflow PIPELINE_INITIALISATION {
         .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json").withIndex())
         .map {
             raw, idx ->
-	    newid = "pool" + params.poolid +  "sample" + idx
+	    newid = params.poolid +  "sample" + idx
 	    if (!raw[2]) {
                     return [ newid, [id:newid] + raw[0] + [ single_end:true ], [ raw[1] ] ]
                 } else {
@@ -155,7 +155,7 @@ workflow PIPELINE_COMPLETION {
 // Check and validate pipeline parameters
 //
 def validateInputParameters() {
-    println "TODO"
+    // TODO
 }
 
 //

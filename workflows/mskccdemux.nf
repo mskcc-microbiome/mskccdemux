@@ -217,12 +217,6 @@ workflow MSKCCDEMUX {
 	seqkit_input
 
     )
-    tag_empty_f(
-	demux_f.out.samplefq
-    )
-    tag_empty_r(
-	demux_r.out.samplefq
-    )
 
     //SEQKIT_STATS.out.stats.collectFile( name: 'demultiplex_seqkit_stats_mqc.out')
     // SEQKIT_STATS.out.stats
