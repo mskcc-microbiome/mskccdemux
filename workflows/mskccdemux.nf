@@ -93,11 +93,11 @@ workflow MSKCCDEMUX {
     // Get the unique fastqs from the sample sheet and execute pool/multiplex level fastqc
 //    ch_samplesheet.view()
     fqc_inputs = ch_samplesheet.flatMap{
-       meta, reads ->
-    reads.withIndex().collect { read, idx ->
-        def new_meta = ["run_accession": meta["run_accession"], "single_end":  meta["single_end"], "read_idx": idx + 1]
-        [new_meta, read]
-    }}.unique()
+	meta, reads ->
+	reads.withIndex().collect { read, idx ->
+            def new_meta = ["id": params.poolid, "run_accession": meta["run_accession"], "single_end":  meta["single_end"], "read_idx": idx + 1]
+            [new_meta, read]
+	}}.unique()
 
     FASTQC (
         fqc_inputs
