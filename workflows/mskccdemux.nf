@@ -9,9 +9,8 @@ include { MULTIQC                        } from '../modules/nf-core/multiqc/main
 include { SEQKIT_STATS                   } from '../modules/nf-core/seqkit/stats/main'
 include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
 include { add_demultiplex_info as adi_r  } from '../modules/local/add_demultiplex_info/main'
-include { tag_empty as tag_empty_f       } from '../modules/local/tag_empty/main'
-include { tag_empty as tag_empty_r       } from '../modules/local/tag_empty/main'
 include { make_map                       } from '../modules/local/make_map/main'
+include { MAKE_MANIFEST                  } from '../modules/local/make_manifest/main'
 include { demultiplex as demux_f         } from '../modules/local/demux/main'
 include { demultiplex as demux_r         } from '../modules/local/demux/main'
 include { paramsSummaryMap               } from 'plugin/nf-schema'
@@ -204,15 +203,14 @@ workflow MSKCCDEMUX {
 	samplefiles.flatten(),
 	2
     )
+    def all_demux_files = demux_f.out.samplefq.mix(
+	demux_r.out.samplefq
+    ).collect(sort: true)
 
-    seqkit_input = demux_f.out.samplefq.mix(
-	 demux_r.out.samplefq
-    )
-	.collect(sort:true)
-	.map{ x ->
-	    meta = ["id": "${params.poolid}"]
-	    [meta, x]
-	}
+    def seqkit_input = all_demux_files.map { x ->
+	def meta = ["id": "${params.poolid}"]
+	[meta, x]
+    }
     SEQKIT_STATS (
 	seqkit_input
 
@@ -229,8 +227,12 @@ workflow MSKCCDEMUX {
     )
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]}).mix(rename_for_multiqc.out.mqc)
     ch_versions = ch_versions.mix(FASTQC.out.versions.first()).mix(SEQKIT_STATS.out.versions)
-
-
+    //all_demux_files.filter( ~/_R1.fastq/ ).view()
+ //   MAKE_MANIFEST(all_demux_files.filter( ~/_R1.fastq/ ), paired=true)
+MAKE_MANIFEST(
+    demux_f.out.samplefq.mix(demux_r.out.samplefq).collect(sort: true),
+    true
+)
     //
     // Collate and save software versions
     //
@@ -241,7 +243,6 @@ workflow MSKCCDEMUX {
             sort: true,
             newLine: true
         ).set { ch_collated_versions }
-
 
     //
     // MODULE: MultiQC
@@ -282,7 +283,6 @@ workflow MSKCCDEMUX {
         [],
         []
     )
-
     emit:multiqc_report = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
     versions       = ch_versions                 // channel: [ path(versions.yml) ]
 

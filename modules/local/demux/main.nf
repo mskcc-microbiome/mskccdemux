@@ -17,6 +17,8 @@ process demultiplex {
     output:
     path "*[.gz|_empty]" , emit: samplefq
 
+
+
     container 'ghcr.io/vdblab/qiime:1.9.1'
     cpus 1
     memory '16 GB'
