@@ -5,6 +5,7 @@
 */
 include { FASTQC                         } from '../modules/nf-core/fastqc/main'
 include { CAT_FASTQ as MERGE_RUNS        } from '../modules/nf-core/cat/fastq/main'
+include { CUTADAPT as CUTADAPT_READTHROUGH } from '../modules/nf-core/cutadapt/main'
 include { MULTIQC                        } from '../modules/nf-core/multiqc/main'
 include { SEQKIT_STATS                   } from '../modules/nf-core/seqkit/stats/main'
 include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
@@ -17,12 +18,19 @@ include { paramsSummaryMap               } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc           } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML         } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText         } from '../subworkflows/local/utils_nfcore_mskccdemux_pipeline'
-
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     RUN MAIN WORKFLOW
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
+
+// code from https://github.com/nf-core/ampliseq/
+// Complement table taken from http://arep.med.harvard.edu/labgc/adnan/projects/Utilities/revcomp.html
+def makeComplement(seq) {
+    def complements = [ A:'T', T:'A', U:'A', G:'C', C:'G', Y:'R', R:'Y', S:'S', W:'W', K:'M', M:'K', B:'V', D:'H', H:'D', V:'B', N:'N' ]
+    def comp = seq.toUpperCase().collect { base -> complements[ base ] ?: 'X' }.join()
+    return comp
+}
 
 process remove_primers {
     tag 'remove_primers'
@@ -30,8 +38,8 @@ process remove_primers {
     tuple val(meta), path(readsF), path(readsR)
 
     output:
-    path 'reads1.fastq', emit: reads1
-    path 'reads2.fastq', emit: reads2
+    tuple val(meta), path('reads1.fastq'), emit: reads1
+    tuple val(meta), path('reads2.fastq'), emit: reads2
     path 'barcodes.fastq', emit: barcodes
     path 'primer_removal.log'
     container 'ghcr.io/vdblab/biopython:1.70a'
@@ -48,17 +56,24 @@ process remove_primers {
     """
 }
 
+
 process guess_encoding {
     tag 'guess_encoding'
     input:
-    path reads_fq
+    tuple val(meta), path(reads_fq)
     output:
       path 'encoding.txt' , emit: encoding
     container 'ghcr.io/vdblab/biopython:1.70a'
     cpus 1
     script:
+    def dealwithgz = reads_fq[0].getName().endsWith("gz")
+    def uncompress_str = dealwithgz ? "zcat ${reads_fq[0]} | head -n 400 > tmp.fq" : ""
+    def guess_input = dealwithgz  ? "tmp.fq" : reads_fq[0]
     """
-    guess-encoding.py ${reads_fq} encoding.txt 2>> guess_encoding.log
+    set +o pipefail
+    $uncompress_str
+    set -o pipefail
+    guess-encoding.py $guess_input encoding.txt 2>> guess_encoding.log
     """
 }
 
@@ -125,19 +140,27 @@ workflow MSKCCDEMUX {
     persample_inputs = ch_samplesheet_unique
 	.combine(ch_reads_runmerged.first())
 	.map{ meta, reads, newmeta, newreads ->
-	meta = ["id": params.poolid, "primer_f": meta["primer_f"], "primer_r": meta["primer_r"]]
+	    meta = ["id": params.poolid, "primer_f": meta["primer_f"], "primer_r": meta["primer_r"]] +
+	    [fw_primer_revcomp: makeComplement(meta["primer_f"].reverse())] +
+                [rv_primer_revcomp: makeComplement(meta["primer_r"].reverse())]
 	[meta, newreads[0], newreads[1]]
 	}.unique()
-
-    persample_inputs
 
     remove_primers (
 	persample_inputs
     )
-
-
+    ch_noprimers = params.trim_readthrough ?
+	CUTADAPT_READTHROUGH(remove_primers.out.reads1
+			     .combine(remove_primers.out.reads2)
+			     .map{ meta1, reads1, meta2, reads2 ->
+		[meta1, [reads1, reads2]] } ).reads :
+        remove_primers.out.reads1
+	.combine(remove_primers.out.reads2)
+	.map{ meta1, reads1, meta2, reads2 ->
+	    [meta1, [reads1, reads2]] }
+    ch_noprimers.view()
     guess_encoding (
-	remove_primers.out[0]
+	ch_noprimers
     )
     /////////////////////////////////////
     map1_path = outdir.resolve( params.poolid + ".map.1")
@@ -179,14 +202,14 @@ workflow MSKCCDEMUX {
     //)
 
     adi_f (
-	remove_primers.out.reads1,
+	ch_noprimers.first().map{ meta, reads  -> reads[0]},
 	map1_path,
 	remove_primers.out.barcodes,
 	guess_encoding.out.encoding,
 	1
     )
     adi_r  (
-	remove_primers.out.reads2,
+	ch_noprimers.first().map{ meta, reads  -> reads[1]},
 	map2_path,
 	remove_primers.out.barcodes,
 	guess_encoding.out.encoding,
