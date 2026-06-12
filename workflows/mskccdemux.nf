@@ -34,6 +34,9 @@ def makeComplement(seq) {
 
 process remove_primers {
     tag 'remove_primers'
+    container 'ghcr.io/vdblab/biopython:1.70a'
+    cpus 1
+    memory '12 GB'
     input:
     tuple val(meta), path(readsF), path(readsR)
 
@@ -42,9 +45,7 @@ process remove_primers {
     tuple val(meta), path('reads2.fastq'), emit: reads2
     path 'barcodes.fastq', emit: barcodes
     path 'primer_removal.log'
-    container 'ghcr.io/vdblab/biopython:1.70a'
-    cpus 1
-    memory '12 GB'
+
     script:
     def primer_f = meta.primer_f
     def primer_r = meta.primer_r
@@ -59,12 +60,14 @@ process remove_primers {
 
 process guess_encoding {
     tag 'guess_encoding'
-    input:
-    tuple val(meta), path(reads_fq)
-    output:
-      path 'encoding.txt' , emit: encoding
     container 'ghcr.io/vdblab/biopython:1.70a'
     cpus 1
+    input:
+    tuple val(meta), path(reads_fq)
+
+    output:
+    path 'encoding.txt' , emit: encoding
+
     script:
     def dealwithgz = reads_fq[0].getName().endsWith("gz")
     def uncompress_str = dealwithgz ? "zcat ${reads_fq[0]} | head -n 400 > tmp.fq" : ""
@@ -78,9 +81,6 @@ process guess_encoding {
 }
 
 process rename_for_multiqc{
-    """ Multiqc requires the _mqc string in the file name for auto detection
-
-    """
     input:
     path seqkit
     output:
@@ -98,8 +98,8 @@ workflow MSKCCDEMUX {
     ch_samplesheet // channel: samplesheet read in from --input
 
     main:
-    ch_versions = Channel.empty()
-    ch_multiqc_files = Channel.empty()
+    ch_versions = channel.empty()
+    ch_multiqc_files = channel.empty()
     def outdir = file(params.outdir)
     //LOG(ch_fastqs)
     //
@@ -132,14 +132,13 @@ workflow MSKCCDEMUX {
 
 
     ch_samplesheet_unique = ch_samplesheet
-	.unique { meta, reads ->
+	.unique { meta, _reads ->
             meta.rawid  // if we have multiple libraries, we need to toss  duplicated  entries in the sample sheet
 	}
 
-    def merged_reads = ch_reads_runmerged.first()
     persample_inputs = ch_samplesheet_unique
 	.combine(ch_reads_runmerged.first())
-	.map{ meta, reads, newmeta, newreads ->
+	.map{ meta, _reads, _newmeta, newreads ->
 	    meta = ["id": params.poolid, "primer_f": meta["primer_f"], "primer_r": meta["primer_r"]] +
 	    [fw_primer_revcomp: makeComplement(meta["primer_f"].reverse())] +
                 [rv_primer_revcomp: makeComplement(meta["primer_r"].reverse())]
@@ -152,11 +151,11 @@ workflow MSKCCDEMUX {
     ch_noprimers = params.trim_readthrough ?
 	CUTADAPT_READTHROUGH(remove_primers.out.reads1
 			     .combine(remove_primers.out.reads2)
-			     .map{ meta1, reads1, meta2, reads2 ->
+			     .map{ meta1, reads1, _meta2, reads2 ->
 		[meta1, [reads1, reads2]] } ).reads :
         remove_primers.out.reads1
 	.combine(remove_primers.out.reads2)
-	.map{ meta1, reads1, meta2, reads2 ->
+	.map{ meta1, reads1, _meta2, reads2 ->
 	    [meta1, [reads1, reads2]] }
     ch_noprimers.view()
     guess_encoding (
@@ -165,11 +164,11 @@ workflow MSKCCDEMUX {
     /////////////////////////////////////
     map1_path = outdir.resolve( params.poolid + ".map.1")
     map2_path = outdir.resolve( params.poolid + ".map.2")
-    header = Channel.value("#SampleID\tBarcodeSequence\tLinkerPrimerSequence\tReversePrimer\tDescription")
+    header = channel.value("#SampleID\tBarcodeSequence\tLinkerPrimerSequence\tReversePrimer\tDescription")
     header
     .concat(
 	ch_samplesheet_unique
-	.map{ meta, reads ->
+	.map{ meta, _reads ->
             "${meta.id}\t${meta.barcode_f}\t${meta.primer_f}\t${meta.primer_r}\t${meta.rawid}"
 	    }
     )
@@ -177,7 +176,7 @@ workflow MSKCCDEMUX {
     header
     .concat(
 	ch_samplesheet_unique
-	.map{ meta, reads ->
+	.map{ meta, _reads ->
             "${meta.id}\t${meta.barcode_r}\t${meta.primer_r}\t${meta.primer_f}\t${meta.rawid}"
 	    }
     )
@@ -187,10 +186,10 @@ workflow MSKCCDEMUX {
     sampledir.mkdir()
 
     ch_samplesheet_unique
-    .map{ meta, reads ->
+    .map{ meta, _reads ->
             "${meta.id}"
 	    }
-    .concat(Channel.value("Unassigned"))
+    .concat(channel.value("Unassigned"))
     .collectFile{ x ->
         [ sampledir.resolve("${x}.sample"), x ]
 	}
@@ -202,14 +201,14 @@ workflow MSKCCDEMUX {
     //)
 
     adi_f (
-	ch_noprimers.first().map{ meta, reads  -> reads[0]},
+	ch_noprimers.first().map{ _meta, reads  -> reads[0]},
 	map1_path,
 	remove_primers.out.barcodes,
 	guess_encoding.out.encoding,
 	1
     )
     adi_r  (
-	ch_noprimers.first().map{ meta, reads  -> reads[1]},
+	ch_noprimers.first().map{ _meta, reads  -> reads[1]},
 	map2_path,
 	remove_primers.out.barcodes,
 	guess_encoding.out.encoding,
@@ -246,9 +245,9 @@ workflow MSKCCDEMUX {
     // 	    name: 'demultiplex_seqkit_stats_mqc.out',
     // 	    storeDir: "${params.outdir}/")
     rename_for_multiqc(
-	SEQKIT_STATS.out.stats.collect{it[1]}
+	SEQKIT_STATS.out.stats.collect{ it -> it[1] }
     )
-    ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it[1]}).mix(rename_for_multiqc.out.mqc)
+    ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it -> it[1]}).mix(rename_for_multiqc.out.mqc)
     ch_versions = ch_versions.mix(FASTQC.out.versions.first()).mix(SEQKIT_STATS.out.versions)
     //all_demux_files.filter( ~/_R1.fastq/ ).view()
  //   MAKE_MANIFEST(all_demux_files.filter( ~/_R1.fastq/ ), paired=true)
@@ -270,24 +269,24 @@ MAKE_MANIFEST(
     //
     // MODULE: MultiQC
     //
-    ch_multiqc_config        = Channel.fromPath(
+    ch_multiqc_config        = channel.fromPath(
         "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
     ch_multiqc_custom_config = params.multiqc_config ?
-        Channel.fromPath(params.multiqc_config, checkIfExists: true) :
-        Channel.empty()
+        channel.fromPath(params.multiqc_config, checkIfExists: true) :
+        channel.empty()
     ch_multiqc_logo          = params.multiqc_logo ?
-        Channel.fromPath(params.multiqc_logo, checkIfExists: true) :
-        Channel.empty()
+        channel.fromPath(params.multiqc_logo, checkIfExists: true) :
+        channel.empty()
 
     summary_params      = paramsSummaryMap(
         workflow, parameters_schema: "nextflow_schema.json")
-    ch_workflow_summary = Channel.value(paramsSummaryMultiqc(summary_params))
+    ch_workflow_summary = channel.value(paramsSummaryMultiqc(summary_params))
     ch_multiqc_files = ch_multiqc_files.mix(
         ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
     ch_multiqc_custom_methods_description = params.multiqc_methods_description ?
         file(params.multiqc_methods_description, checkIfExists: true) :
         file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
-    ch_methods_description                = Channel.value(
+    ch_methods_description                = channel.value(
         methodsDescriptionText(ch_multiqc_custom_methods_description))
 
     ch_multiqc_files = ch_multiqc_files.mix(ch_collated_versions)

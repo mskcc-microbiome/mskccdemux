@@ -9,6 +9,7 @@ process add_demultiplex_info {
     output:
     path "demultiplex_r${dirNum}/seqs.fastq", emit: seqsfq
     path "demultiplex_r${dirNum}/seqs.fna",   emit: seqsfna
+
     container 'ghcr.io/vdblab/qiime:1.9.1'
     cpus 1
     memory '12 GB'

@@ -31,11 +31,11 @@ workflow PIPELINE_INITIALISATION {
     monochrome_logs   // boolean: Do not use coloured log outputs
     nextflow_cli_args //   array: List of positional nextflow CLI args
     outdir            //  string: The output directory where the results will be saved
-    input             //  string: Path to input samplesheet
+//    input             //  string: Path to input samplesheet
 
     main:
 
-    ch_versions = Channel.empty()
+    ch_versions = channel.empty()
 
     //
     // Print version and exit if required and dump pipeline parameters to JSON file
@@ -72,11 +72,11 @@ workflow PIPELINE_INITIALISATION {
     // Create channel from input file provided through params.input
     //
 
-    Channel
+    channel
         .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json").withIndex())
         .map {
             raw, idx ->
-	    newid = params.poolid +  "sample" + idx
+	    def newid = params.poolid +  "sample" + idx
 	    if (!raw[2]) {
                     return [ newid, [id:newid] + raw[0] + [ single_end:true ], [ raw[1] ] ]
                 } else {
@@ -111,7 +111,6 @@ workflow PIPELINE_COMPLETION {
     email_on_fail   //  string: email address sent on pipeline failure
     plaintext_email // boolean: Send plain-text email instead of HTML
     outdir          //    path: Path to output directory where results will be published
-    monochrome_logs // boolean: Disable ANSI colour codes in log output
     hook_url        //  string: hook URL for notifications
     multiqc_report  //  string: Path to MultiQC report
 

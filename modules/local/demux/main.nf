@@ -1,12 +1,13 @@
 process demultiplex {
-    """ Demultiplex with qiime, and tag empty file
+    container 'ghcr.io/vdblab/qiime:1.9.1'
+
+    // Demultiplex with qiime, and tag empty file
 
 
-    Ampliseq complains (correctly) about empty fastqs; after seqkit stats
-    , this adds _empty to the fastqs so they don't get picked up by ampliseq's
-    glob input specification
+    // Ampliseq complains (correctly) about empty fastqs; after seqkit stats
+    // , this adds _empty to the fastqs so they don't get picked up by ampliseq's
+    // glob input specification
 
-    """
     tag 'demultiplex'
 
     input:
@@ -18,8 +19,6 @@ process demultiplex {
     path "*[.gz|_empty]" , emit: samplefq
 
 
-
-    container 'ghcr.io/vdblab/qiime:1.9.1'
     cpus 1
     memory '16 GB'
     script:
