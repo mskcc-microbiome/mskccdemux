@@ -10,7 +10,7 @@ include { MULTIQC                        } from '../modules/nf-core/multiqc/main
 include { SEQKIT_STATS                   } from '../modules/nf-core/seqkit/stats/main'
 include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
 include { add_demultiplex_info as adi_r  } from '../modules/local/add_demultiplex_info/main'
-include { make_map                       } from '../modules/local/make_map/main'
+//include { make_map                       } from '../modules/local/make_map/main'
 include { MAKE_MANIFEST                  } from '../modules/local/make_manifest/main'
 include { demultiplex as demux_f         } from '../modules/local/demux/main'
 include { demultiplex as demux_r         } from '../modules/local/demux/main'
@@ -96,11 +96,15 @@ workflow MSKCCDEMUX {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
+    multiqc_config
+    multiqc_logo
+    multiqc_methods_description
+    outdir
 
     main:
-    ch_versions = channel.empty()
-    ch_multiqc_files = channel.empty()
-    def outdir = file(params.outdir)
+    outdir = file(outdir)
+    def ch_versions = channel.empty()
+    def ch_multiqc_files = channel.empty()
     //LOG(ch_fastqs)
     //
     // MODULE: Run FastQC
@@ -157,7 +161,6 @@ workflow MSKCCDEMUX {
 	.combine(remove_primers.out.reads2)
 	.map{ meta1, reads1, _meta2, reads2 ->
 	    [meta1, [reads1, reads2]] }
-    ch_noprimers.view()
     guess_encoding (
 	ch_noprimers
     )
@@ -248,64 +251,81 @@ workflow MSKCCDEMUX {
 	SEQKIT_STATS.out.stats.collect{ it -> it[1] }
     )
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect{it -> it[1]}).mix(rename_for_multiqc.out.mqc)
-    ch_versions = ch_versions.mix(FASTQC.out.versions.first()).mix(SEQKIT_STATS.out.versions)
+    //ch_versions = ch_versions.mix(FASTQC.out.versions.first()).mix(SEQKIT_STATS.out.versions)
     //all_demux_files.filter( ~/_R1.fastq/ ).view()
  //   MAKE_MANIFEST(all_demux_files.filter( ~/_R1.fastq/ ), paired=true)
 MAKE_MANIFEST(
     demux_f.out.samplefq.mix(demux_r.out.samplefq).collect(sort: true),
     true
 )
-    //
-    // Collate and save software versions
-    //
-    softwareVersionsToYAML(ch_versions)
+    def topic_versions = channel.topic("versions")
+        .distinct()
+        .branch { entry ->
+            versions_file: entry instanceof Path
+            versions_tuple: true
+        }
+
+    def topic_versions_string = topic_versions.versions_tuple
+        .map { process, tool, version ->
+            [ process[process.lastIndexOf(':')+1..-1], "  ${tool}: ${version}" ]
+        }
+        .groupTuple(by:0)
+        .map { process, tool_versions ->
+            tool_versions.unique().sort()
+            "${process}:\n${tool_versions.join('\n')}"
+        }
+    def ch_collated_versions = softwareVersionsToYAML(ch_versions.mix(topic_versions.versions_file))
+        .mix(topic_versions_string)
         .collectFile(
-            storeDir: "${params.outdir}/pipeline_info",
-            name:  'mskccdemux_software_'  + 'mqc_'  + 'versions.yml',
+            storeDir: "${outdir}/pipeline_info",
+            name: 'nf_core_'  +  'mskccdemux_software_'  + 'mqc_'  + 'versions.yml',
             sort: true,
             newLine: true
-        ).set { ch_collated_versions }
+        )
+
 
     //
     // MODULE: MultiQC
     //
-    ch_multiqc_config        = channel.fromPath(
-        "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
-    ch_multiqc_custom_config = params.multiqc_config ?
-        channel.fromPath(params.multiqc_config, checkIfExists: true) :
-        channel.empty()
-    ch_multiqc_logo          = params.multiqc_logo ?
-        channel.fromPath(params.multiqc_logo, checkIfExists: true) :
-        channel.empty()
-
-    summary_params      = paramsSummaryMap(
-        workflow, parameters_schema: "nextflow_schema.json")
-    ch_workflow_summary = channel.value(paramsSummaryMultiqc(summary_params))
-    ch_multiqc_files = ch_multiqc_files.mix(
-        ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
-    ch_multiqc_custom_methods_description = params.multiqc_methods_description ?
-        file(params.multiqc_methods_description, checkIfExists: true) :
-        file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
-    ch_methods_description                = channel.value(
-        methodsDescriptionText(ch_multiqc_custom_methods_description))
 
     ch_multiqc_files = ch_multiqc_files.mix(ch_collated_versions)
-    ch_multiqc_files = ch_multiqc_files.mix(
-        ch_methods_description.collectFile(
-            name: 'methods_description_mqc.yaml',
-            sort: true
-        )
-    )
+    def ch_summary_params = paramsSummaryMap(workflow, parameters_schema: "nextflow_schema.json")
+    def ch_workflow_summary = channel.value(paramsSummaryMultiqc(ch_summary_params))
+    ch_multiqc_files = ch_multiqc_files.mix(ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
+    def ch_multiqc_custom_methods_description = multiqc_methods_description
+        ? file(multiqc_methods_description, checkIfExists: true)
+        : file("${projectDir}/assets/methods_description_template.yml", checkIfExists: true)
+    def ch_methods_description = channel.value(methodsDescriptionText(ch_multiqc_custom_methods_description))
+    ch_multiqc_files = ch_multiqc_files.mix(ch_methods_description.collectFile(name: 'methods_description_mqc.yaml', sort: true))
+
+    // summary_params      = paramsSummaryMap(
+    //     workflow, parameters_schema: "nextflow_schema.json")
+    // ch_workflow_summary = channel.value(paramsSummaryMultiqc(summary_params))
+    // ch_multiqc_files = ch_multiqc_files.mix(
+    //     ch_workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
+    // ch_multiqc_custom_methods_description = params.multiqc_methods_description ?
+    //     file(params.multiqc_methods_description, checkIfExists: true) :
+    //     file("$projectDir/assets/methods_description_template.yml", checkIfExists: true)
+    // ch_methods_description                = channel.value(
+    //     methodsDescriptionText(ch_multiqc_custom_methods_description))
+
 
     MULTIQC (
-        ch_multiqc_files.collect(),
-        ch_multiqc_config.toList(),
-        ch_multiqc_custom_config.toList(),
-        ch_multiqc_logo.toList(),
-        [],
-        []
-    )
-    emit:multiqc_report = MULTIQC.out.report.toList() // channel: /path/to/multiqc_report.html
+        ch_multiqc_files.flatten().collect().map { files ->
+            [
+                [id: 'mskccdemux'],
+                files,
+                multiqc_config
+                    ? file(multiqc_config, checkIfExists: true)
+                    : file("${projectDir}/assets/multiqc_config.yml", checkIfExists: true),
+                multiqc_logo ? file(multiqc_logo, checkIfExists: true) : [],
+                [],
+                [],
+            ]
+	})
+
+
+    emit:multiqc_report = MULTIQC.out.report.map { _meta, report -> [report] }.toList() // channel: /path/to/multiqc_report.html
     versions       = ch_versions                 // channel: [ path(versions.yml) ]
 
 }

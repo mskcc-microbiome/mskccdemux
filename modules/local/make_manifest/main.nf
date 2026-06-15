@@ -7,9 +7,10 @@ process MAKE_MANIFEST {
     output:
     path "manifest.tsv", emit: manifest
     path "missing.tsv", emit: missing
+    tuple val("${task.process}"), val('make_manifest'), val("1.0"), emit: versions_make_manifest, topic: versions
+
 
     exec:
-    def sampleIds = [] // Find all sample IDs from R1 files
     def completeSamples = []
     def incompleteSamples = []
     demux_files.each { file ->

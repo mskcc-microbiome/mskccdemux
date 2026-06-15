@@ -1,5 +1,7 @@
 process demultiplex {
     container 'ghcr.io/vdblab/qiime:1.9.1'
+    cpus 1
+    memory '16 GB'
 
     // Demultiplex with qiime, and tag empty file
 
@@ -18,9 +20,6 @@ process demultiplex {
     output:
     path "*[.gz|_empty]" , emit: samplefq
 
-
-    cpus 1
-    memory '16 GB'
     script:
     def samplename = sample_file.getName().replaceFirst(/\.sample/, '')
     def outfile    = "${samplename}_R${readDir}.fastq"

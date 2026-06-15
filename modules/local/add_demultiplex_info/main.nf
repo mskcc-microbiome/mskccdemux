@@ -1,5 +1,8 @@
 process add_demultiplex_info {
     tag 'add_demux_info'
+    container 'ghcr.io/vdblab/qiime:1.9.1'
+    cpus 1
+    memory '12 GB'
     input:
     path reads
     path map
@@ -10,9 +13,6 @@ process add_demultiplex_info {
     path "demultiplex_r${dirNum}/seqs.fastq", emit: seqsfq
     path "demultiplex_r${dirNum}/seqs.fna",   emit: seqsfna
 
-    container 'ghcr.io/vdblab/qiime:1.9.1'
-    cpus 1
-    memory '12 GB'
     script:
     """
     split_libraries_fastq.py \\
