@@ -10,7 +10,6 @@ include { MULTIQC                        } from '../modules/nf-core/multiqc/main
 include { SEQKIT_STATS                   } from '../modules/nf-core/seqkit/stats/main'
 include { add_demultiplex_info as adi_f  } from '../modules/local/add_demultiplex_info/main'
 include { add_demultiplex_info as adi_r  } from '../modules/local/add_demultiplex_info/main'
-//include { make_map                       } from '../modules/local/make_map/main'
 include { MAKE_MANIFEST                  } from '../modules/local/make_manifest/main'
 include { demultiplex as demux_f         } from '../modules/local/demux/main'
 include { demultiplex as demux_r         } from '../modules/local/demux/main'
@@ -198,10 +197,6 @@ workflow MSKCCDEMUX {
 	}
     .set{ samplefiles }
 
-    /////////////////////////////////////
-    //make_map (
-    // 	params.input
-    //)
 
     adi_f (
 	ch_noprimers.first().map{ _meta, reads  -> reads[0]},

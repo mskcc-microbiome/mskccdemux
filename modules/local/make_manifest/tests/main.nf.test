@@ -1,0 +1,30 @@
+nextflow_process {
+
+    name "Test make_manifest"
+    script "../main.nf"
+    process "MAKE_MANIFEST"
+
+
+
+    test("test makes files") {
+
+        when {
+            process {
+                """
+                input[0] = channel.of([file("a_R1.fastq"), file("B_R1.fastq"), file("C_R1.fastq_empty")])
+                input[1] = true
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            assert snapshot(process.out).match()
+	    assert path(process.out.manifest[0]).readLines().size() == 3
+//	    assert path(process.out.manifest[0]).readLines()*.split('\t')*.size().every { it == 3 }
+	    assert path(process.out.manifest[0]).text.contains("a\ta_R1.fastq\ta_R2.fastq")
+	    assert path(process.out.manifest[0]).text.contains("B\tB_R1.fastq\tB_R2.fastq")
+	    assert path(process.out.missing[0]).text.contains("C\n")
+        }
+    }
+}

@@ -10,39 +10,47 @@ process MAKE_MANIFEST {
     path "manifest.tsv", emit: manifest
     path "missing.tsv", emit: missing
     tuple val("${task.process}"), val('make_manifest'), val("1.0"), emit: versions_make_manifest, topic: versions
+    script:"""
+
+    tmp_manifest="tmp_manifest"
+    tmp_missing="tmp_missing"
 
 
-    exec:
-    def completeSamples = []
-    def incompleteSamples = []
-    demux_files.each { file ->
-        def matcher = file.name =~ /(.+)_R1\.fastq(.*)/
-        if (matcher.find()) {
-            def sampleId = matcher.group(1)
-	    def isbad = matcher.group(2) == "_empty"
-	    if (isbad){
-		incompleteSamples.add(sampleId)
-	    } else {
-		if (sampleId != "Unassigned") {
-		    def r1Path = file.resolve().toString()
-		    def r2Path = paired ? r1Path.replace("_R1", "_R2") : ""
-		    completeSamples.add([sampleId, r1Path, r2Path])
-		}
-	    }
-        }
-    }
+    # Create/truncate output files
+    printf 'sample_id\tR1\tR2\n' > manifest.tsv
+    : > "\$tmp_manifest"
+    : > "\$tmp_missing"
 
-    completeSamples = completeSamples.sort()
+    for file in ${demux_files}
+    do
+	name=\$(basename "\$file")
 
-    task.workDir.resolve("manifest.tsv").withPrintWriter { w ->
-        w.println("sample_id\tR1\tR2")
-        completeSamples.each { row ->
-            w.println(row.join('\t'))
-        }
-    }
-    task.workDir.resolve("missing.tsv").withPrintWriter { w ->
-        incompleteSamples.each { row ->
-            w.println(row.join('\t'))
-        }
-    }
+	case "\$name" in
+	    *_R1.fastq*)
+		# sample_id = everything before the last "_R1.fastq"
+		sample_id=\${name%_R1.fastq*}
+
+		# suffix = everything after the last "_R1.fastq"
+		suffix=\${name##*_R1.fastq}
+
+		if [ "\$suffix" = "_empty" ]; then
+		    printf '%s\n' "\$sample_id" >> "\$tmp_missing"
+		else
+		    if [ "\$sample_id" != "Unassigned" ]; then
+			r1_path="\$file"
+			r2_path=\$(printf '%s\n' "\$r1_path" | sed 's/_R1/_R2/')
+
+			printf '%s\t%s\t%s\n' "\$sample_id" "\$r1_path" "\$r2_path" >> "\$tmp_manifest"
+		    fi
+		fi
+		;;
+	esac
+    done
+
+    sort "\$tmp_manifest" >> manifest.tsv
+    cat "\$tmp_missing" > missing.tsv
+    rm  "\$tmp_manifest" "\$tmp_missing"
+
+"""
+
 }
