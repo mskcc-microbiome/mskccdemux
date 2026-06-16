@@ -1,5 +1,7 @@
 process MAKE_MANIFEST {
     tag  'make_manifest'
+    label 'process_single'
+
     input:
     path demux_files
     val paired

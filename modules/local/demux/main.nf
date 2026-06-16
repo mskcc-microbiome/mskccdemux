@@ -1,5 +1,6 @@
 process demultiplex {
     container 'ghcr.io/vdblab/qiime:1.9.1'
+    label 'process_single'
     cpus 1
     memory '16 GB'
 
