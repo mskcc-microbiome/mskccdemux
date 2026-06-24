@@ -22,6 +22,7 @@ include { CUTADAPT as CUTADAPT_REMOVEPRIMERS         } from './modules/nf-core/c
 include { CUTADAPT_DEMUX   } from './modules/local/cutadapt_demux'
 include { CUTADAPT_DEMUX_RC} from './modules/local/cutadapt_demux_rc'
 include { MERGE_DEMUX      } from './modules/local/merge_demux'
+include { CAT_FASTQ        } from './modules/nf-core/cat/fastq/main'
 include { OUTPUT_MANIFEST  } from './modules/local/output_manifest'
 include { FASTQC           } from './modules/nf-core/fastqc/main'
 include { MULTIQC          } from './modules/nf-core/multiqc/main'
@@ -61,7 +62,7 @@ workflow {
     // 1. Parse samplesheet: each row is one library (one R1/R2 pair)
     //    Columns: pool,R1,R2,oligos
     // -------------------------------------------------------------------------
-    ch_samplesheet = channel.fromPath(params.samplesheet, checkIfExists: true)
+    ch_samplesheet_raw = channel.fromPath(params.samplesheet, checkIfExists: true)
         .splitCsv(header: true, sep: ',')
         .map { row ->
             def meta = [id: row.pool]
@@ -69,6 +70,32 @@ workflow {
             def r2   = file(row.R2, checkIfExists: true)
             [meta, r1, r2, file(row.oligos, checkIfExists: true)]
         }
+	.groupTuple(by: 0)
+        .map { pool, r1s, r2s, oligos ->
+            def unique_oligos = oligos.unique { it.toString() }
+
+            if( unique_oligos.size() != 1 )
+                error "Pool '${pool}' has multiple oligos files: ${unique_oligos}"
+            tuple(pool, r1s, r2s, unique_oligos[0])
+        }
+	.branch { row ->
+        needs_merge: row[1].size() > 1
+        single:      true
+    }
+
+    ch_merged = CAT_FASTQ(ch_samplesheet_raw.needs_merge)
+
+    ch_single = ch_samplesheet_raw.single.map { pool, r1s, r2s, oligos ->
+        tuple(pool, r1s[0], r2s[0], oligos)
+    }
+
+    ch_samplesheet = ch_single.mix(ch_merged)
+
+
+
+
+
+
     ch_pool_primers = ch_samplesheet
 	.map { meta, _r1, _r2, oligos ->
 	    def pool_prf_prr = oligos
